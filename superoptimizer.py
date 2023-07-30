@@ -102,37 +102,46 @@ class VM:
         self.co_consts = [c for c in program.co_consts]
         self.co_varnames = [c for c in program.co_varnames]
         self.ret = None
+        self.pc = 0
 
     def run(self) -> MemoryState:
-        for inst in self.intructions:
+        while True:
+            inst = self.intructions[self.pc]
             match inst.opname:
                 case "RESUME":
-                    pass
+                    self.pc+=1
                 case "LOAD_CONST":
                     # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_CONST
                     consti = inst.arg
                     self.stack.append(self.co_consts[consti])
+                    self.pc+=1
                 case "UNPACK_SEQUENCE":
                     # https://docs.python.org/3.13/library/dis.html#opcode-UNPACK_SEQUENCE
                     count = inst.arg
                     self.stack.extend(self.stack.pop()[:-count-1:-1])
+                    self.pc+=1
                 case "STORE_FAST":
                     # https://docs.python.org/3.11/library/dis.html#opcode-STORE_FAST
                     var_num = inst.arg
                     top = self.stack.pop()
                     self.co_varnames[var_num] = top
+                    self.pc+=1
                 case "LOAD_FAST":
                     # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_FAST
                     var_num = inst.arg
                     self.stack.append(self.co_varnames[var_num])
+                    self.pc+=1
                 case "SWAP":
                     # https://docs.python.org/3.11/library/dis.html#opcode-SWAP
                     i = inst.arg
                     self.stack[-i], self.stack[-1] = self.stack[-1], self.stack[-i]
+                    self.pc+=1
                 case "POP_TOP":
                     self.stack.pop()
+                    self.pc+=1
                 case "RETURN_VALUE":
                     self.ret = self.stack[-1]
+                    break
                 case _:
                     raise RuntimeError(f'Unsupported opcodes: {inst.opname}')
         memory_state = MemoryState(self.stack, self.co_consts, self.co_varnames, self.ret)
