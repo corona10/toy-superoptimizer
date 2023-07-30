@@ -6,6 +6,8 @@ import copy
 import dis
 import itertools
 
+from typing import Generator
+
 import tqdm
 
 
@@ -16,7 +18,7 @@ class MemoryState:
         self.co_varnames = co_varnames
         self.ret = ret
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         if type(other) != type(self):
             return False
         if self.stack != other.stack:
@@ -29,27 +31,27 @@ class MemoryState:
             return False
         return True
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"stack: {self.stack}, co_consts: {self.co_consts}, co_varnames: {self.co_varnames}, ret: {self.ret}"
 
 
 class VirtualInstruction:
-    def __init__(self, op_name, arg):
+    def __init__(self, op_name: str, arg: int | None):
         self.opname = op_name
         self.arg = arg
 
-    def cost(self):
+    def cost(self) -> int:
         if self.arg is None:
             return 0
         return 1
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'({self.opname}, {self.arg})'
 
     @staticmethod
@@ -79,24 +81,24 @@ class Program:
             instructions.append(instruction)
         return cls(instructions, copy.deepcopy(f.__code__.co_consts), copy.deepcopy(f.__code__.co_varnames))
 
-    def cost(self):
+    def cost(self) -> int:
         ret = 0
         for inst in self.instructions:
             ret += inst.cost()
         return ret
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.instructions)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.__str__()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.instructions)
 
 
 class VM:
-    def __init__(self, program):
+    def __init__(self, program: Program):
         self.intructions = [inst for inst in program.instructions]
         self.stack = []
         self.co_consts = [c for c in program.co_consts]
@@ -153,7 +155,7 @@ class Superoptimizer:
     def __init__(self, program: Program):
         self.program = program
 
-    def generate_programs(self):
+    def generate_programs(self) -> Generator[Program, None, None]:
         for length in range(1, len(self.program) + 1):
             for instructions in itertools.product(VirtualInstruction.ops(), repeat=length-1):
                 arg_sets = []
@@ -185,7 +187,7 @@ class Superoptimizer:
                                                 copy.deepcopy(self.program.co_varnames))
                     yield generated_program
 
-    def search(self):
+    def search(self) -> Program:
         origin_vm = VM(self.program)
         origin_state = origin_vm.run()
         print("========================================================")
