@@ -1,3 +1,4 @@
+import copy
 import dis
 import itertools
 
@@ -36,23 +37,58 @@ class VirtualInstruction:
         self.opname = op_name
         self.arg = arg
 
+    def cost(self):
+        if self.arg == None:
+            return 0
+        return 1
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        return f'({self.opname}, {self.arg})'
+
     @staticmethod
     def ops():
-        return ("RESUME", "LOAD_CONST", "UNPACK_SEQUENCE", "STORE_FAST", "LOAD_FAST", "SWAP", "POP_TOP", "RETURN_VALUE")
+        return ("LOAD_CONST", "UNPACK_SEQUENCE", "STORE_FAST", "LOAD_FAST", "SWAP", "POP_TOP", "RETURN_VALUE")
 
 
 class Program:
-    def __init__(self, f):
+    def __init__(self, instructions: list[VirtualInstruction], co_consts, co_varnames):
         self.instructions = []
-        self.co_consts = [c for c in f.__code__.co_consts]
-        self.co_varnames = [c for c in f.__code__.co_varnames]
+        for inst in instructions:
+            if inst.opname == "RESUME":
+                # Filter out RESUME
+                continue
+            self.instructions.append(inst)
+        self.co_consts = co_consts # [c for c in f.__code__.co_consts]
+        self.co_varnames = co_varnames # [c for c in f.__code__.co_varnames]
 
+    @classmethod
+    def from_function(cls, f):
+        instructions = []
         for inst in dis.Bytecode(f):
+            if inst.opname == "RESUME":
+                # Filter out RESUME
+                continue
             instruction = VirtualInstruction(inst.opname, inst.arg)
-            self.instructions.append(instruction)
+            instructions.append(instruction)
+        return cls(instructions, copy.deepcopy(f.__code__.co_consts), copy.deepcopy(f.__code__.co_varnames))
+
+    def cost(self):
+        ret = 0
+        for inst in self.instructions:
+            ret += inst.cost()
+        return ret
 
     def __len__(self):
         return len(self.instructions)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        return str(self.instructions)
 
 
 class VM:
@@ -106,19 +142,53 @@ class Superoptimizer:
 
     def generate_programs(self):
         for length in tqdm.tqdm(range(1, len(self.program))):
-            for prog in itertools.product(VirtualInstruction.ops(), repeat=length):
-                pass
+            for instructions in itertools.product(VirtualInstruction.ops(), repeat=length-1):
+                arg_sets = []
+                for inst in instructions:
+                    match inst:
+                        case "LOAD_CONST":
+                            arg_sets.append([tuple([val]) for val in range(len(self.program.co_consts))])
+                        case "UNPACK_SEQUENCE":
+                            arg_sets.append([tuple([val]) for val in range(len(instructions))])
+                        case "STORE_FAST":
+                            arg_sets.append([tuple([val]) for val in range(len(self.program.co_varnames))])
+                        case "LOAD_FAST":
+                            arg_sets.append([tuple([val]) for val in range(len(self.program.co_varnames))])
+                        case "SWAP":
+                            arg_sets.append([tuple([val]) for val in range(len(instructions))])
+                        case "POP_TOP":
+                            arg_sets.append([(None,)])
+                        case "RETURN_VALUE":
+                            arg_sets.append([(None,)])
+
+                for arg_set in itertools.product(*arg_sets):
+                    virtual_instructions = []
+                    for inst, args in zip(instructions, arg_set):
+                        virtual_instruction = VirtualInstruction(inst, *args)
+                        virtual_instructions.append(virtual_instruction)
+
+                    generated_program = Program(virtual_instructions,
+                                                copy.deepcopy(self.program.co_consts),
+                                                copy.deepcopy(self.program.co_varnames))
+                    yield generated_program
 
     def search(self):
         origin_vm = VM(self.program)
         origin_state = origin_vm.run()
-        min_length = len(self.program)
-        print(f"Original State: {origin_state}")
-        """
-        for prog in self.generate_programs(f):
+        print(f"Original State: {origin_state} / Program: {self.program}")
+        optimized_prog, optimized_state  = self.program, None
+        for prog in self.generate_programs():
             vm = VM(prog)
-            possible_state = vm.run()
-        """
+            try:
+                possible_state = vm.run()
+                if possible_state == origin_state and prog.cost() < optimized_prog.cost():
+                    optimized_prog, optimized_state = prog, possible_state
+                    break
+            except Exception:
+                continue
+
+        if optimized_state != None:
+            print(f'Found -> Optimized State: {optimized_state}, / Program: {optimized_prog}')
 
 
 if __name__ == '__main__':
@@ -126,6 +196,6 @@ if __name__ == '__main__':
         a, a = 3, 5
         return a
 
-    program = Program(f)
+    program = Program.from_function(f)
     optimizer = Superoptimizer(program)
     optimizer.search()
