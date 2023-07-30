@@ -1,3 +1,7 @@
+"""
+Toy superoptimizer for minimum Python Bytecode Spec
+"""
+
 import copy
 import dis
 import itertools
@@ -38,7 +42,7 @@ class VirtualInstruction:
         self.arg = arg
 
     def cost(self):
-        if self.arg == None:
+        if self.arg is None:
             return 0
         return 1
 
@@ -105,7 +109,7 @@ class VM:
                 case "RESUME":
                     pass
                 case "LOAD_CONST":
-                    # https://docs.python.org/3.13/library/dis.html#opcode-LOAD_CONST
+                    # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_CONST
                     consti = inst.arg
                     self.stack.append(self.co_consts[consti])
                 case "UNPACK_SEQUENCE":
@@ -113,16 +117,16 @@ class VM:
                     count = inst.arg
                     self.stack.extend(self.stack.pop()[:-count-1:-1])
                 case "STORE_FAST":
-                    # https://docs.python.org/3.13/library/dis.html#opcode-STORE_FAST
+                    # https://docs.python.org/3.11/library/dis.html#opcode-STORE_FAST
                     var_num = inst.arg
                     top = self.stack.pop()
                     self.co_varnames[var_num] = top
                 case "LOAD_FAST":
-                    # https://docs.python.org/3.13/library/dis.html#opcode-LOAD_FAST
+                    # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_FAST
                     var_num = inst.arg
                     self.stack.append(self.co_varnames[var_num])
                 case "SWAP":
-                    # https://docs.python.org/3.13/library/dis.html#opcode-SWAP
+                    # https://docs.python.org/3.11/library/dis.html#opcode-SWAP
                     i = inst.arg
                     self.stack[-i], self.stack[-1] = self.stack[-1], self.stack[-i]
                 case "POP_TOP":
@@ -141,7 +145,7 @@ class Superoptimizer:
         self.program = program
 
     def generate_programs(self):
-        for length in tqdm.tqdm(range(1, len(self.program))):
+        for length in tqdm.tqdm(range(1, len(self.program) + 1)):
             for instructions in itertools.product(VirtualInstruction.ops(), repeat=length-1):
                 arg_sets = []
                 for inst in instructions:
@@ -178,24 +182,36 @@ class Superoptimizer:
         print(f"Original State: {origin_state} / Program: {self.program}")
         optimized_prog, optimized_state  = self.program, None
         for prog in self.generate_programs():
+            if len(optimized_prog) < len(prog):
+                break
             vm = VM(prog)
             try:
                 possible_state = vm.run()
-                if possible_state == origin_state and prog.cost() < optimized_prog.cost():
+                if possible_state == origin_state and len(prog) <= len(optimized_prog) and prog.cost() < optimized_prog.cost():
                     optimized_prog, optimized_state = prog, possible_state
                     break
             except Exception:
                 continue
 
-        if optimized_state != None:
+        if optimized_state is not None:
             print(f'Found -> Optimized State: {optimized_state}, / Program: {optimized_prog}')
-
+        else:
+            print('Not found!')
 
 if __name__ == '__main__':
     def f():
-        a, a = 3, 5
+        a, b = 3, 5
+        a, b = b, a
         return a
 
     program = Program.from_function(f)
+    optimizer = Superoptimizer(program)
+    optimizer.search()
+
+    def g():
+        a, a = 3, 5
+        return a
+
+    program = Program.from_function(g)
     optimizer = Superoptimizer(program)
     optimizer.search()
