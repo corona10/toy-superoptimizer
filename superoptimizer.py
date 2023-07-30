@@ -120,6 +120,7 @@ class VM:
                 case "UNPACK_SEQUENCE":
                     # https://docs.python.org/3.13/library/dis.html#opcode-UNPACK_SEQUENCE
                     count = inst.arg
+                    assert(len(self.stack[-1]) == count)
                     self.stack.extend(self.stack.pop()[:-count-1:-1])
                     self.pc+=1
                 case "STORE_FAST":
@@ -157,7 +158,7 @@ class Superoptimizer:
 
     def generate_programs(self) -> Generator[Program, None, None]:
         for length in range(1, len(self.program) + 1):
-            for instructions in itertools.product(VirtualInstruction.ops(), repeat=length-1):
+            for instructions in itertools.product(VirtualInstruction.ops(), repeat=length):
                 arg_sets = []
                 for inst in instructions:
                     match inst:
