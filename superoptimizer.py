@@ -24,6 +24,12 @@ class MemoryState:
             return False
         return True
 
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        return f"stack: {self.stack}, co_consts: {self.co_consts}, co_varnames: {self.co_varnames}, ret: {self.ret}"
+
 
 class VirtualInstruction:
     def __init__(self, op_name, arg):
@@ -95,24 +101,24 @@ class VM:
 
 class Superoptimizer:
 
-    def __init__(self, f):
-        self.num_insts = 0
-        for inst in dis.Bytecode(f):
-            self.num_insts += 1
-        self.co_consts = [c for c in f.__code__.co_consts]
-        self.co_varnames = [c for c in f.__code__.co_varnames]
+    def __init__(self, program: Program):
+        self.program = program
 
     def generate_programs(self):
-        for length in tqdm.tqdm(range(1, self.num_insts)):
+        for length in tqdm.tqdm(range(1, len(self.program))):
             for prog in itertools.product(VirtualInstruction.ops(), repeat=length):
                 pass
 
-    def search(self, f):
-        origin_vm = VM(f)
+    def search(self):
+        origin_vm = VM(self.program)
         origin_state = origin_vm.run()
+        min_length = len(self.program)
+        print(f"Original State: {origin_state}")
+        """
         for prog in self.generate_programs(f):
-            optimized_vm = VM(prog)
-            possible_state = optimized_vm.run()
+            vm = VM(prog)
+            possible_state = vm.run()
+        """
 
 
 if __name__ == '__main__':
@@ -121,8 +127,5 @@ if __name__ == '__main__':
         return a
 
     program = Program(f)
-    vm = VM(program)
-    state = vm.run()
-    print(state.ret)
-    # optimizer = Superoptimizer(f)
-    # optimizer.generate_programs()
+    optimizer = Superoptimizer(program)
+    optimizer.search()
