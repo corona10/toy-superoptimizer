@@ -154,7 +154,7 @@ class Superoptimizer:
         self.program = program
 
     def generate_programs(self):
-        for length in tqdm.tqdm(range(1, len(self.program) + 1)):
+        for length in range(1, len(self.program) + 1):
             for instructions in itertools.product(VirtualInstruction.ops(), repeat=length-1):
                 arg_sets = []
                 for inst in instructions:
@@ -188,9 +188,10 @@ class Superoptimizer:
     def search(self):
         origin_vm = VM(self.program)
         origin_state = origin_vm.run()
+        print("========================================================")
         print(f"Original State: {origin_state} / Program: {self.program}")
         optimized_prog, optimized_state  = self.program, None
-        for prog in self.generate_programs():
+        for prog in tqdm.tqdm(self.generate_programs()):
             if len(optimized_prog) < len(prog):
                 break
             vm = VM(prog)
@@ -206,6 +207,9 @@ class Superoptimizer:
             print(f'Found -> Optimized State: {optimized_state}, / Program: {optimized_prog}')
         else:
             print('Not found!')
+        print("========================================================")
+        return optimized_prog
+
 
 if __name__ == '__main__':
     def f():
