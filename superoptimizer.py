@@ -4,6 +4,7 @@ Toy superoptimizer for minimum Python Bytecode Spec
 
 import copy
 import dis
+import enum
 import itertools
 
 from typing import Generator
@@ -38,9 +39,21 @@ class MemoryState:
         return f"stack: {self.stack}, co_consts: {self.co_consts}, co_varnames: {self.co_varnames}, ret: {self.ret}"
 
 
+# TODO: Autogen from opcode.opmap
+class Opcode(enum.IntEnum):
+    POP_TOP = (1,)
+    RETURN_VALUE = (83,)
+    UNPACK_SEQUENCE = (92,)
+    SWAP = (99,)
+    LOAD_CONST = (100,)
+    LOAD_FAST = (124,)
+    STORE_FAST = (125,)
+    RESUME = (151,)
+
+
 class Instruction:
-    def __init__(self, op_name: str, arg: int | None):
-        self.opname = op_name
+    def __init__(self, op_code: Opcode, arg: int | None):
+        self.op_code = op_code
         self.arg = arg
 
     def cost(self) -> int:
@@ -52,23 +65,23 @@ class Instruction:
         return self.__str__()
 
     def __str__(self) -> str:
-        return f"({self.opname}, {self.arg})"
+        return f"({self.op_code.name}, {self.arg})"
 
     def __eq__(self, other) -> bool:
         if type(self) != type(other):
             return False
-        return self.opname == other.opname and self.arg == other.arg
+        return self.op_code == other.op_code and self.arg == other.arg
 
     @staticmethod
     def ops():
         return (
-            "LOAD_CONST",
-            "UNPACK_SEQUENCE",
-            "STORE_FAST",
-            "LOAD_FAST",
-            "SWAP",
-            "POP_TOP",
-            "RETURN_VALUE",
+            Opcode.LOAD_CONST,
+            Opcode.UNPACK_SEQUENCE,
+            Opcode.STORE_FAST,
+            Opcode.LOAD_FAST,
+            Opcode.SWAP,
+            Opcode.POP_TOP,
+            Opcode.RETURN_VALUE,
         )
 
 
@@ -76,7 +89,7 @@ class Program:
     def __init__(self, instructions: list[Instruction], co_consts, co_varnames):
         self.instructions = []
         for inst in instructions:
-            if inst.opname == "RESUME":
+            if inst.op_code == Opcode.RESUME:
                 # Filter out RESUME
                 continue
             self.instructions.append(inst)
@@ -87,10 +100,11 @@ class Program:
     def from_function(cls, f):
         instructions = []
         for inst in dis.Bytecode(f):
-            if inst.opname == "RESUME":
+            if inst.opname == Opcode.RESUME:
                 # Filter out RESUME
                 continue
-            instruction = Instruction(inst.opname, inst.arg)
+            opcode = Opcode(inst.opcode)
+            instruction = Instruction(opcode, inst.arg)
             instructions.append(instruction)
         return cls(
             instructions,
@@ -126,40 +140,40 @@ class VM:
     def run(self) -> MemoryState:
         while True:
             inst = self.intructions[self.pc]
-            match inst.opname:
-                case "RESUME":
+            match inst.op_code:
+                case Opcode.RESUME:
                     self.pc += 1
-                case "LOAD_CONST":
+                case Opcode.LOAD_CONST:
                     # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_CONST
                     consti = inst.arg
                     self.stack.append(self.co_consts[consti])
                     self.pc += 1
-                case "UNPACK_SEQUENCE":
+                case Opcode.UNPACK_SEQUENCE:
                     # https://docs.python.org/3.13/library/dis.html#opcode-UNPACK_SEQUENCE
                     count = inst.arg
                     assert len(self.stack[-1]) == count
                     self.stack.extend(self.stack.pop()[: -count - 1 : -1])
                     self.pc += 1
-                case "STORE_FAST":
+                case Opcode.STORE_FAST:
                     # https://docs.python.org/3.11/library/dis.html#opcode-STORE_FAST
                     var_num = inst.arg
                     top = self.stack.pop()
                     self.co_varnames[var_num] = top
                     self.pc += 1
-                case "LOAD_FAST":
+                case Opcode.LOAD_FAST:
                     # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_FAST
                     var_num = inst.arg
                     self.stack.append(self.co_varnames[var_num])
                     self.pc += 1
-                case "SWAP":
+                case Opcode.SWAP:
                     # https://docs.python.org/3.11/library/dis.html#opcode-SWAP
                     i = inst.arg
                     self.stack[-i], self.stack[-1] = self.stack[-1], self.stack[-i]
                     self.pc += 1
-                case "POP_TOP":
+                case Opcode.POP_TOP:
                     self.stack.pop()
                     self.pc += 1
-                case "RETURN_VALUE":
+                case Opcode.RETURN_VALUE:
                     self.ret = self.stack[-1]
                     break
                 case _:
@@ -180,38 +194,38 @@ class Superoptimizer:
                 arg_sets = []
                 for inst in instructions:
                     match inst:
-                        case "LOAD_CONST":
+                        case Opcode.LOAD_CONST:
                             arg_sets.append(
                                 [
                                     tuple([val])
                                     for val in range(len(self.program.co_consts))
                                 ]
                             )
-                        case "UNPACK_SEQUENCE":
+                        case Opcode.UNPACK_SEQUENCE:
                             arg_sets.append(
                                 [tuple([val]) for val in range(len(instructions))]
                             )
-                        case "STORE_FAST":
+                        case Opcode.STORE_FAST:
                             arg_sets.append(
                                 [
                                     tuple([val])
                                     for val in range(len(self.program.co_varnames))
                                 ]
                             )
-                        case "LOAD_FAST":
+                        case Opcode.LOAD_FAST:
                             arg_sets.append(
                                 [
                                     tuple([val])
                                     for val in range(len(self.program.co_varnames))
                                 ]
                             )
-                        case "SWAP":
+                        case Opcode.SWAP:
                             arg_sets.append(
                                 [tuple([val]) for val in range(len(instructions))]
                             )
-                        case "POP_TOP":
+                        case Opcode.POP_TOP:
                             arg_sets.append([(None,)])
-                        case "RETURN_VALUE":
+                        case Opcode.RETURN_VALUE:
                             arg_sets.append([(None,)])
 
                 for arg_set in itertools.product(*arg_sets):
