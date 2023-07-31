@@ -1,6 +1,6 @@
 import unittest
 
-from superoptimizer import Superoptimizer, Program, Instruction
+from superoptimizer import Superoptimizer, Program, Instruction, Opcode
 
 
 class TestSuperOptimizer(unittest.TestCase):
@@ -14,12 +14,12 @@ class TestSuperOptimizer(unittest.TestCase):
         optimizer = Superoptimizer(program)
         ret = optimizer.search()
         expected = [
-            Instruction("LOAD_CONST", 1),
-            Instruction("UNPACK_SEQUENCE", 2),
-            Instruction("STORE_FAST", 1),
-            Instruction("STORE_FAST", 0),
-            Instruction("LOAD_FAST", 0),
-            Instruction("RETURN_VALUE", None),
+            Instruction(Opcode.LOAD_CONST, 1),
+            Instruction(Opcode.UNPACK_SEQUENCE, 2),
+            Instruction(Opcode.STORE_FAST, 1),
+            Instruction(Opcode.STORE_FAST, 0),
+            Instruction(Opcode.LOAD_FAST, 0),
+            Instruction(Opcode.RETURN_VALUE, None),
         ]
         self.assertEqual(ret.instructions, expected)
 
@@ -32,11 +32,11 @@ class TestSuperOptimizer(unittest.TestCase):
         optimizer = Superoptimizer(program)
         ret = optimizer.search()
         expected = [
-            Instruction("LOAD_CONST", 1),
-            Instruction("UNPACK_SEQUENCE", 2),
-            Instruction("POP_TOP", None),
-            Instruction("STORE_FAST", 0),
-            Instruction("LOAD_FAST", 0),
-            Instruction("RETURN_VALUE", None),
+            Instruction(Opcode.LOAD_CONST, 1),
+            Instruction(Opcode.UNPACK_SEQUENCE, 2),
+            Instruction(Opcode.POP_TOP, None),
+            Instruction(Opcode.STORE_FAST, 0),
+            Instruction(Opcode.LOAD_FAST, 0),
+            Instruction(Opcode.RETURN_VALUE, None),
         ]
         self.assertEqual(ret.instructions, expected)
