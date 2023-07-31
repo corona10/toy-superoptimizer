@@ -47,12 +47,10 @@ class Opcode(enum.IntEnum):
     SWAP = (99,)
     LOAD_CONST = (100,)
     COMPARE_OP = (107,)
-    POP_JUMP_FORWARD_IF_FALSE = (114,)
     BINARY_OP = (122,)
     LOAD_FAST = (124,)
     STORE_FAST = (125,)
     RESUME = (151,)
-    POP_JUMP_BACKWARD_IF_TRUE = (176,)
 
 
 class Instruction:
@@ -85,11 +83,9 @@ class Instruction:
             Opcode.SWAP,
             Opcode.LOAD_CONST,
             Opcode.COMPARE_OP,
-            Opcode.POP_JUMP_FORWARD_IF_FALSE,
             Opcode.BINARY_OP,
             Opcode.LOAD_FAST,
             Opcode.STORE_FAST,
-            Opcode.POP_JUMP_BACKWARD_IF_TRUE,
         )
 
 
@@ -324,20 +320,6 @@ class VM:
                     # https://docs.python.org/3.11/library/dis.html#opcode-RETURN_VALUE
                     self.ret = self.stack[-1]
                     break
-                case Opcode.POP_JUMP_FORWARD_IF_FALSE:
-                    # https://docs.python.org/3.11/library/dis.html#opcode-POP_JUMP_FORWARD_IF_FALSE
-                    oparg = inst.arg
-                    cond = self.stack.pop()
-                    if not cond:
-                        self.pc += oparg
-                    self._dispatch()
-                case Opcode.POP_JUMP_BACKWARD_IF_TRUE:
-                    # # https://docs.python.org/3.11/library/dis.html#opcode-POP_JUMP_BACKWARD_IF_TRUE
-                    oparg = inst.arg
-                    cond = self.stack.pop()
-                    if cond:
-                        self.pc -= oparg
-                    self._dispatch()
                 case _:
                     raise RuntimeError(f"Unsupported opcodes: {inst.opname}")
         memory_state = MemoryState(
@@ -393,14 +375,6 @@ class Superoptimizer:
                             arg_sets.append([(None,)])
                         case Opcode.RETURN_VALUE:
                             arg_sets.append([(None,)])
-                        case Opcode.POP_JUMP_FORWARD_IF_FALSE:
-                            arg_sets.append(
-                                [tuple([val]) for val in range(len(instructions))]
-                            )
-                        case Opcode.POP_JUMP_BACKWARD_IF_TRUE:
-                            arg_sets.append(
-                                [tuple([val]) for val in range(len(instructions))]
-                            )
 
                 for arg_set in itertools.product(*arg_sets):
                     virtual_instructions = []
