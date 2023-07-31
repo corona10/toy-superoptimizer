@@ -46,9 +46,13 @@ class Opcode(enum.IntEnum):
     UNPACK_SEQUENCE = (92,)
     SWAP = (99,)
     LOAD_CONST = (100,)
+    COMPARE_OP = (107,)
+    POP_JUMP_FORWARD_IF_FALSE = (114,)
+    BINARY_OP = (122,)
     LOAD_FAST = (124,)
     STORE_FAST = (125,)
     RESUME = (151,)
+    POP_JUMP_BACKWARD_IF_TRUE = (176,)
 
 
 class Instruction:
@@ -75,13 +79,17 @@ class Instruction:
     @staticmethod
     def ops():
         return (
-            Opcode.LOAD_CONST,
-            Opcode.UNPACK_SEQUENCE,
-            Opcode.STORE_FAST,
-            Opcode.LOAD_FAST,
-            Opcode.SWAP,
             Opcode.POP_TOP,
             Opcode.RETURN_VALUE,
+            Opcode.UNPACK_SEQUENCE,
+            Opcode.SWAP,
+            Opcode.LOAD_CONST,
+            Opcode.COMPARE_OP,
+            Opcode.POP_JUMP_FORWARD_IF_FALSE,
+            Opcode.BINARY_OP,
+            Opcode.LOAD_FAST,
+            Opcode.STORE_FAST,
+            Opcode.POP_JUMP_BACKWARD_IF_TRUE,
         )
 
 
@@ -137,45 +145,199 @@ class VM:
         self.ret = None
         self.pc = 0
 
+    def _compare_op(self, left, right, op):
+        match op:
+            case 0:
+                # Py_LT
+                return left < right
+            case 1:
+                # Py_LE
+                return left <= right
+            case 2:
+                # Py_EQ
+                return left == right
+            case 3:
+                # Py_NE
+                return left != right
+            case 4:
+                # Py_GT
+                return left > right
+            case 5:
+                # Py_GE
+                return left >= right
+            case _:
+                raise RuntimeError(f"Unsupported compare op: {op}")
+
+    def _binary_op(self, left, right, op):
+        match op:
+            case 0:
+                # NB_ADD
+                return left + right
+            case 1:
+                # NB_AND
+                return left & right
+            case 2:
+                # NB_FLOOR_DIVIDE
+                return left // right
+            case 3:
+                # NB_LSHIFT
+                return left << right
+            case 4:
+                # NB_MATRIX_MULTIPLY
+                return left @ right
+            case 5:
+                # NB_MULTIPLY
+                return left * right
+            case 6:
+                # NB_REMAINDER
+                return left % right
+            case 7:
+                # NB_OR
+                return left | right
+            case 8:
+                # NB_POWER
+                return left**right
+            case 9:
+                # NB_RSHIFT
+                return left >> right
+            case 10:
+                # NB_SUBTRACT
+                return left - right
+            case 11:
+                # NB_TRUE_DIVIDE
+                return left / right
+            case 12:
+                # NB_XOR
+                return left ^ right
+            case 13:
+                # NB_INPLACE_ADD
+                left += right
+                return left
+            case 14:
+                # NB_INPLACE_AND
+                left &= right
+                return left
+            case 15:
+                # NB_INPLACE_FLOOR_DIVIDE
+                left //= right
+                return left
+            case 16:
+                # NB_INPLACE_LSHIFT
+                left <<= right
+                return left
+            case 17:
+                # NB_INPLACE_MATRIX_MULTIPLY
+                left @= right
+                return left
+            case 18:
+                # NB_INPLACE_MULTIPLY
+                left *= right
+                return left
+            case 19:
+                # NB_INPLACE_REMAINDER
+                left %= right
+                return left
+            case 20:
+                # NB_INPLACE_OR
+                left |= right
+                return left
+            case 21:
+                # NB_INPLACE_POWER
+                left **= right
+                return left
+            case 22:
+                # NB_INPLACE_RSHIFT
+                left <<= right
+                return left
+            case 23:
+                # NB_INPLACE_SUBTRACT
+                left -= right
+                return left
+            case 24:
+                # NB_INPLACE_TRUE_DIVIDE
+                left /= right
+                return left
+            case 25:
+                # NB_INPLACE_XOR
+                left ^= right
+                return left
+            case _:
+                raise RuntimeError(f"Unsupported binary op: {op}")
+
+    def _dispatch(self):
+        self.pc += 1
+
     def run(self) -> MemoryState:
         while True:
             inst = self.intructions[self.pc]
             match inst.op_code:
                 case Opcode.RESUME:
-                    self.pc += 1
+                    self._dispatch()
                 case Opcode.LOAD_CONST:
                     # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_CONST
                     consti = inst.arg
                     self.stack.append(self.co_consts[consti])
-                    self.pc += 1
+                    self._dispatch()
+                case Opcode.COMPARE_OP:
+                    # https://docs.python.org/3.11/library/dis.html#opcode-COMPARE_OP
+                    oparg = inst.arg
+                    right = self.stack.pop()
+                    left = self.stack[-1]
+                    res = self._compare_op(left, right, oparg)
+                    self.stack[-1] = res
+                    self._dispatch()
+                case Opcode.BINARY_OP:
+                    # https://docs.python.org/3.11/library/dis.html#opcode-BINARY_OP
+                    rhs = self.stack.pop()
+                    lhs = self.stack[-1]
+                    assert 0 <= oparg
+                    res = self._binary_op(lhs, rhs, oparg)
+                    self.stack[-1] = res
+                    self._dispatch()
                 case Opcode.UNPACK_SEQUENCE:
-                    # https://docs.python.org/3.13/library/dis.html#opcode-UNPACK_SEQUENCE
+                    # https://docs.python.org/3.11/library/dis.html#opcode-UNPACK_SEQUENCE
                     count = inst.arg
                     assert len(self.stack[-1]) == count
                     self.stack.extend(self.stack.pop()[: -count - 1 : -1])
-                    self.pc += 1
+                    self._dispatch()
                 case Opcode.STORE_FAST:
                     # https://docs.python.org/3.11/library/dis.html#opcode-STORE_FAST
                     var_num = inst.arg
                     top = self.stack.pop()
                     self.co_varnames[var_num] = top
-                    self.pc += 1
+                    self._dispatch()
                 case Opcode.LOAD_FAST:
                     # https://docs.python.org/3.11/library/dis.html#opcode-LOAD_FAST
                     var_num = inst.arg
                     self.stack.append(self.co_varnames[var_num])
-                    self.pc += 1
+                    self._dispatch()
                 case Opcode.SWAP:
                     # https://docs.python.org/3.11/library/dis.html#opcode-SWAP
                     i = inst.arg
                     self.stack[-i], self.stack[-1] = self.stack[-1], self.stack[-i]
-                    self.pc += 1
+                    self._dispatch()
                 case Opcode.POP_TOP:
+                    # https://docs.python.org/3.11/library/dis.html#opcode-POP_TOP
                     self.stack.pop()
-                    self.pc += 1
+                    self._dispatch()
                 case Opcode.RETURN_VALUE:
+                    # https://docs.python.org/3.11/library/dis.html#opcode-RETURN_VALUE
                     self.ret = self.stack[-1]
                     break
+                case Opcode.POP_JUMP_FORWARD_IF_FALSE:
+                    # https://docs.python.org/3.11/library/dis.html#opcode-POP_JUMP_FORWARD_IF_FALSE
+                    oparg = inst.arg
+                    cond = self.stack.pop()
+                    if not cond:
+                        self.pc += oparg
+                    self._dispatch()
+                case Opcode.POP_JUMP_BACKWARD_IF_TRUE:
+                    # # https://docs.python.org/3.11/library/dis.html#opcode-POP_JUMP_BACKWARD_IF_TRUE
+                    oparg = inst.arg
+                    cond = self.stack.pop()
+                    if cond:
+                        self.pc -= oparg
+                    self._dispatch()
                 case _:
                     raise RuntimeError(f"Unsupported opcodes: {inst.opname}")
         memory_state = MemoryState(
@@ -201,6 +363,10 @@ class Superoptimizer:
                                     for val in range(len(self.program.co_consts))
                                 ]
                             )
+                        case Opcode.COMPARE_OP:
+                            arg_sets.append([tuple([val]) for val in range(7)])
+                        case Opcode.BINARY_OP:
+                            arg_sets.append([tuple([val]) for val in range(26)])
                         case Opcode.UNPACK_SEQUENCE:
                             arg_sets.append(
                                 [tuple([val]) for val in range(len(instructions))]
@@ -227,6 +393,14 @@ class Superoptimizer:
                             arg_sets.append([(None,)])
                         case Opcode.RETURN_VALUE:
                             arg_sets.append([(None,)])
+                        case Opcode.POP_JUMP_FORWARD_IF_FALSE:
+                            arg_sets.append(
+                                [tuple([val]) for val in range(len(instructions))]
+                            )
+                        case Opcode.POP_JUMP_BACKWARD_IF_TRUE:
+                            arg_sets.append(
+                                [tuple([val]) for val in range(len(instructions))]
+                            )
 
                 for arg_set in itertools.product(*arg_sets):
                     virtual_instructions = []
