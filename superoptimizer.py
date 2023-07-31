@@ -38,7 +38,7 @@ class MemoryState:
         return f"stack: {self.stack}, co_consts: {self.co_consts}, co_varnames: {self.co_varnames}, ret: {self.ret}"
 
 
-class VirtualInstruction:
+class Instruction:
     def __init__(self, op_name: str, arg: int | None):
         self.opname = op_name
         self.arg = arg
@@ -54,6 +54,11 @@ class VirtualInstruction:
     def __str__(self) -> str:
         return f"({self.opname}, {self.arg})"
 
+    def __eq__(self, other) -> bool:
+        if type(self) != type(other):
+            return False
+        return self.opname == other.opname and self.arg == other.arg
+
     @staticmethod
     def ops():
         return (
@@ -68,7 +73,7 @@ class VirtualInstruction:
 
 
 class Program:
-    def __init__(self, instructions: list[VirtualInstruction], co_consts, co_varnames):
+    def __init__(self, instructions: list[Instruction], co_consts, co_varnames):
         self.instructions = []
         for inst in instructions:
             if inst.opname == "RESUME":
@@ -85,7 +90,7 @@ class Program:
             if inst.opname == "RESUME":
                 # Filter out RESUME
                 continue
-            instruction = VirtualInstruction(inst.opname, inst.arg)
+            instruction = Instruction(inst.opname, inst.arg)
             instructions.append(instruction)
         return cls(
             instructions,
@@ -171,9 +176,7 @@ class Superoptimizer:
 
     def generate_programs(self) -> Generator[Program, None, None]:
         for length in range(1, len(self.program) + 1):
-            for instructions in itertools.product(
-                VirtualInstruction.ops(), repeat=length
-            ):
+            for instructions in itertools.product(Instruction.ops(), repeat=length):
                 arg_sets = []
                 for inst in instructions:
                     match inst:
@@ -214,7 +217,7 @@ class Superoptimizer:
                 for arg_set in itertools.product(*arg_sets):
                     virtual_instructions = []
                     for inst, args in zip(instructions, arg_set):
-                        virtual_instruction = VirtualInstruction(inst, *args)
+                        virtual_instruction = Instruction(inst, *args)
                         virtual_instructions.append(virtual_instruction)
 
                     generated_program = Program(
